@@ -1,4 +1,5 @@
 import random
+import copy
 
 
 # Used as the environment for DQN
@@ -7,6 +8,7 @@ class Board:
         self.rows = rows
         self.columns = columns
         self.num_mines = num_mines
+        self.empty_spaces = rows * columns - num_mines
 
         # Select random starting position
         self.initial_click = (random.randint(0, rows - 1), random.randint(0, columns - 1))
@@ -27,7 +29,7 @@ class Board:
         valid_mine_positions.pop(click_position)
 
         # Generate mine positions from sample space
-        mine_positions = random.sample(valid_mine_positions, self. num_mines)
+        mine_positions = random.sample(valid_mine_positions, self.num_mines)
 
         # Create blank board
         mine_board = []
@@ -54,8 +56,13 @@ class Board:
         # Retrieve the value found on the mine board
         mine_value = self.mine_board[click[0]][click[1]]
 
+        reward = -1
+        terminated = False
+
         if mine_value == -2:  # Checks if value is a mine
             self.live_board[click[0]][click[1]] = -2  # Mark live board as having hit a mine
+            reward = -20
+            terminated = True
         elif mine_value == -1:  # Checks if position has not been clicked
             mine_amount = self.get_mines(click)  # Get number of mines around current space
             if mine_amount == 0:
@@ -71,6 +78,14 @@ class Board:
                 # Update markings on live and mine boards
                 self.mine_board[click[0]][click[1]] = mine_amount
                 self.live_board[click[0]][click[1]] = mine_amount
+            reward = 5
+            self.empty_spaces -= 1
+
+        # Check if all empty spaces have been found
+        if self.empty_spaces == 0:
+            terminated = True
+
+        return reward, terminated
 
     # Count the number of mines in surrounding 3x3 area
     def get_mines(self, click):
@@ -85,6 +100,10 @@ class Board:
     def print_live_board(self):
         for row in self.live_board:
             print(row)
+
+    # Returns a deep copy of the current board state
+    def get_live_board(self):
+        return copy.deepcopy(self.live_board)
 
     # Display mine board state
     def print_mine_board(self):

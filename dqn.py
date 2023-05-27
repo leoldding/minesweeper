@@ -1,4 +1,43 @@
 from torch import nn
+import random
+
+
+class DQN:
+    def __init__(self, height, width):
+
+        self.Q_network = CNN(height, width)
+        self.target_network = CNN(height, width)
+        self.target_network.load_state_dict(self.Q_network.state_dict())
+
+        self.replay_memory = ReplayMemory(1000)
+
+        self.epsilon = 1
+        self.epsilon_decay = 0.98
+        self.epsilon_min = 0.01
+
+        self.gamma = 0.9
+
+        self.batch_size = 128
+
+        self.learning_rate = 0.01
+
+
+# Used to store observations for the DQN
+class ReplayMemory:
+
+    def __init__(self, max_length):
+        self.memory = []
+        self.max_length = max_length
+
+    # Add a new observation to the end of the memory
+    def push(self, sample):
+        self.memory.append(sample)
+        if len(self.memory) > self.max_length:
+            self.memory.pop(0)
+
+    # Return a sample of the memory for training
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
 
 
 # Used for Q network and target network for DQN
