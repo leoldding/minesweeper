@@ -22,19 +22,22 @@ class DQN:
         self.learning_rate = 0.01
 
 
+# Used to store observations for the DQN
 class ReplayMemory:
 
-     def __init__(self, max_length):
-         self.memory = []
-         self.max_length = max_length
+    def __init__(self, max_length):
+        self.memory = []
+        self.max_length = max_length
 
-     def push(self, sample):
-         self.memory.append(sample)
-         if len(self.memory) > self.max_length:
-             self.memory.pop(0)
+    # Add a new observation to the end of the memory
+    def push(self, sample):
+        self.memory.append(sample)
+        if len(self.memory) > self.max_length:
+            self.memory.pop(0)
 
-     def sample(self, batch_size):
-         return random.sample(self.memory, batch_size)
+    # Return a sample of the memory for training
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
 
 
 # Used for Q network and target network for DQN

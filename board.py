@@ -55,6 +55,7 @@ class Board:
     def update_board(self, click):
         # Retrieve the value found on the mine board
         mine_value = self.mine_board[click[0]][click[1]]
+
         reward = -1
         terminated = False
 
@@ -80,6 +81,7 @@ class Board:
             reward = 5
             self.empty_spaces -= 1
 
+        # Check if all empty spaces have been found
         if self.empty_spaces == 0:
             terminated = True
 
@@ -99,6 +101,7 @@ class Board:
         for row in self.live_board:
             print(row)
 
+    # Returns a deep copy of the current board state
     def get_live_board(self):
         return copy.deepcopy(self.live_board)
 
