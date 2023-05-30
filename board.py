@@ -10,19 +10,13 @@ class Board:
         self.num_mines = num_mines
         self.empty_spaces = rows * columns - num_mines
 
-        # Select random starting position
-        self.initial_click = (random.randint(0, rows - 1), random.randint(0, columns - 1))
-
-        self.mine_board = self.generate_mine_board()
+        self.mine_board = None
         self.live_board = self.generate_live_board()
 
-        # Update live board based on starting click
-        self.update_board(self.initial_click)
-
     # Initialize a hidden board with mines
-    def generate_mine_board(self):
+    def generate_mine_board(self, click):
         # Calculate single dimension position of click
-        click_position = self.initial_click[0] * self.rows + self.initial_click[1]
+        click_position = click[0] * self.rows + click[1]
 
         # Remove calculated position from sample space
         valid_mine_positions = [pos for pos in range(self.rows * self.columns)]
@@ -53,6 +47,10 @@ class Board:
 
     # Updates live and mine boards based on given click position
     def update_board(self, click):
+
+        if self.mine_board is None:
+            self.mine_board = self.generate_mine_board(click)
+
         # Retrieve the value found on the mine board
         mine_value = self.mine_board[click[0]][click[1]]
 
@@ -96,6 +94,10 @@ class Board:
                     mines += 1
         return mines
 
+    def reset(self):
+        self.mine_board = None
+        self.live_board = self.generate_live_board()
+
     # Display live board state
     def print_live_board(self):
         for row in self.live_board:
@@ -107,5 +109,6 @@ class Board:
 
     # Display mine board state
     def print_mine_board(self):
-        for row in self.mine_board:
-            print(row)
+        if self.mine_board is not None:
+            for row in self.mine_board:
+                print(row)
