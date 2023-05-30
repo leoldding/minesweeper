@@ -94,6 +94,10 @@ class Board:
                     mines += 1
         return mines
 
+    def reset(self):
+        self.mine_board = None
+        self.live_board = self.generate_live_board()
+
     # Display live board state
     def print_live_board(self):
         for row in self.live_board:
