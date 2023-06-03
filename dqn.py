@@ -55,7 +55,7 @@ class DQN:
 
             episode_steps = 0
             terminated = False
-            while not terminated and episode_steps < n:
+            while not terminated and episode_steps < 100:
                 state = self.board.get_live_board()
                 action = self.select_action()
                 reward, terminated = self.board.update_board(action)
