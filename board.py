@@ -54,15 +54,16 @@ class Board:
         # Retrieve the value found on the mine board
         mine_value = self.mine_board[click[0]][click[1]]
 
-        reward = -1
+        reward = -2
         terminated = False
 
         if mine_value == -2:  # Checks if value is a mine
             self.live_board[click[0]][click[1]] = -2  # Mark live board as having hit a mine
-            reward = -20
+            reward = self.empty_spaces * -1
             terminated = True
         elif mine_value == -1:  # Checks if position has not been clicked
             mine_amount = self.get_mines(click)  # Get number of mines around current space
+            empty_old = self.empty_spaces
             if mine_amount == 0:
                 # Update markings on live and mine boards
                 self.mine_board[click[0]][click[1]] = 0
@@ -76,11 +77,13 @@ class Board:
                 # Update markings on live and mine boards
                 self.mine_board[click[0]][click[1]] = mine_amount
                 self.live_board[click[0]][click[1]] = mine_amount
-            reward = 5
             self.empty_spaces -= 1
+            reward = (empty_old - self.empty_spaces)
 
         # Check if all empty spaces have been found
         if self.empty_spaces == 0:
+            print('GAME WON')
+            reward = 50
             terminated = True
 
         return reward, terminated
@@ -97,6 +100,7 @@ class Board:
     def reset(self):
         self.mine_board = None
         self.live_board = self.generate_live_board()
+        self.empty_spaces = self.rows * self.columns - self.num_mines
 
     # Display live board state
     def print_live_board(self):
