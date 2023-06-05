@@ -36,8 +36,6 @@ class DQN:
         self.optimizer = torch.optim.Adam(self.Q_network.parameters(), lr=self.learning_rate)
         self.criterion = torch.nn.MSELoss()
 
-        self.steps = 0
-
         self.episode_rewards = []
         self.episode_loss = []
         self.episode_empty = []
@@ -63,7 +61,8 @@ class DQN:
                 self.replay_memory.push(state, action, reward, next_state)
 
                 episode_steps += 1
-                self.steps += 1
+
+            self.optimize()
 
             self.optimize()
 
@@ -93,43 +92,40 @@ class DQN:
         if len(self.replay_memory) < self.batch_size:
             return
 
-        self.optimizer.zero_grad()
+        loss_meter = LossMeter()
 
-        current_state_dataset = TensorDataset(torch.FloatTensor(self.replay_memory.current_states).to(self.device),
-                                              torch.IntTensor(self.replay_memory.actions).to(self.device))
-        current_state_loader = DataLoader(current_state_dataset)
+        dataset = TensorDataset(torch.FloatTensor(self.replay_memory.current_states).to(self.device),
+                                torch.IntTensor(self.replay_memory.actions).to(self.device),
+                                torch.IntTensor(self.replay_memory.rewards).to(self.device),
+                                torch.FloatTensor(self.replay_memory.next_states).to(self.device))
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
-        next_state_dataset = TensorDataset(torch.FloatTensor(self.replay_memory.next_states).to(self.device),
-                                           torch.IntTensor(self.replay_memory.rewards).to(self.device))
-        next_state_loader = DataLoader(next_state_dataset)
-
-        q_rows, q_columns, target_rows, target_columns = [], [], [], []
-
-        for current_state, action in current_state_loader:
+        for current_state, action, reward, next_state in dataloader:
             q_row, q_column = self.Q_network(
-                current_state.reshape(1, 1, self.rows, self.columns))
-            q_rows.append(q_row[0][action[0][0]])
-            q_columns.append(q_column[0][action[0][1]])
+                current_state.reshape(current_state.shape[0], 1, self.rows, self.columns))
+            q_rows = [row[action[0][0]] for row in q_row]
+            q_columns = [column[action[0][1]] for column in q_column]
 
-        for next_state, reward in next_state_loader:
             target_row, target_column = self.target_network(
-                next_state.reshape(1, 1, self.rows, self.columns))
-            target_rows.append(self.gamma * torch.max(target_row) + reward)
-            target_columns.append(self.gamma * torch.max(target_column) + reward)
+                next_state.reshape(next_state.shape[0], 1, self.rows, self.columns))
+            target_rows = [self.gamma * torch.max(target_row[i]) + reward[i] for i in range(len(target_row))]
+            target_columns = [self.gamma * torch.max(target_column[i]) + reward[i] for i in range(len(target_column))]
 
-        row_loss = self.criterion(
-            torch.tensor(q_rows, dtype=torch.float32, requires_grad=True),
-            torch.tensor(target_rows, dtype=torch.float32))
-        col_loss = self.criterion(
-            torch.tensor(q_columns, dtype=torch.float32, requires_grad=True),
-            torch.tensor(target_columns, dtype=torch.float32))
-        total_loss = row_loss + col_loss
-        total_loss.backward()
+            row_loss = self.criterion(
+                torch.tensor(q_rows, dtype=torch.float32, requires_grad=True),
+                torch.tensor(target_rows, dtype=torch.float32))
+            col_loss = self.criterion(
+                torch.tensor(q_columns, dtype=torch.float32, requires_grad=True),
+                torch.tensor(target_columns, dtype=torch.float32))
 
-        if self.steps % 100 == 0:
-            self.episode_loss.append(total_loss.detach())
+            self.optimizer.zero_grad()
+            total_loss = row_loss + col_loss
+            total_loss.backward()
+            self.optimizer.step()
 
-        self.optimizer.step()
+            loss_meter.update(total_loss.item(), len(action))
+
+        self.episode_loss.append(loss_meter.average)
 
 
 # Used to store observations for the DQN
@@ -230,3 +226,25 @@ class CNN(nn.Module):
         row = self.row_branch(x)
         column = self.column_branch(x)
         return [row, column]
+
+
+class LossMeter:
+    def __init__(self):
+        self.average = 0
+        self.count = 0
+        self.sum = 0
+        self.reset()
+
+    def reset(self):
+        self.average = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, count=1):
+        self.count += count
+        self.sum += val * count
+        self.average = self.sum / self.count
+
+    def __repr__(self):
+        text = f'Loss: {self.average:.4f}'
+        return text
