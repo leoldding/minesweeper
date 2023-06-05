@@ -19,7 +19,7 @@ class DQN:
         self.target_network.load_state_dict(self.Q_network.state_dict())
         self.target_update_rate = 500
 
-        self.replay_memory = ReplayMemory(10000)
+        self.replay_memory = ReplayMemory(50000)
 
         self.board = Board(rows, columns, num_mines)
 
@@ -61,6 +61,8 @@ class DQN:
                 self.replay_memory.push(state, action, reward, next_state)
 
                 episode_steps += 1
+
+            self.optimize()
 
             self.optimize()
 
