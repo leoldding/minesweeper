@@ -14,6 +14,7 @@ class DQN:
         self.columns = columns
         self.num_mines = num_mines
 
+        # instantiate both networks
         self.Q_network = CNN(rows, columns).to(self.device)
         self.target_network = CNN(rows, columns).to(self.device)
         self.target_network.load_state_dict(self.Q_network.state_dict())
@@ -36,25 +37,27 @@ class DQN:
         self.optimizer = torch.optim.Adam(self.Q_network.parameters(), lr=self.learning_rate)
         self.criterion = torch.nn.MSELoss()
 
+        # tracked metrics
         self.episode_rewards = []
         self.episode_loss = []
         self.episode_empty = []
         self.episode_steps = []
 
     def train(self, episodes):
-
         for episode in tqdm(range(1, episodes+1), desc='Episodes'):
             print(f'Episode {episode}')
+
             self.episode_rewards.append(0)
             self.board.reset()
 
-            episode_steps = 0
+            episode_steps = 0  # max number of steps allowed for one episode
             terminated = False
+
             while not terminated and episode_steps < 100:
-                state = self.board.get_live_board()
-                action = self.select_action()
-                reward, terminated = self.board.update_board(action)
-                next_state = self.board.get_live_board()
+                state = self.board.get_live_board()  # get current board state
+                action = self.select_action()  # determine action
+                reward, terminated = self.board.update_board(action)  # apply action to board
+                next_state = self.board.get_live_board()  # get state after action
 
                 self.episode_rewards[-1] += reward
 
@@ -64,12 +67,12 @@ class DQN:
 
             self.optimize()
 
-            self.optimize()
-
+            # hard copy of q network values to target network
             if episode % self.target_update_rate == 0:
                 print('Updating Target Network')
                 self.target_network.load_state_dict(self.Q_network.state_dict())
 
+            # decrementing epsilon for epsilon greedy policy
             if episode % self.epsilon_update_rate == 0:
                 print('Updating Epsilon')
                 self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
@@ -79,8 +82,10 @@ class DQN:
 
     # Select an epsilon greedy action
     def select_action(self):
+        # random action if random value is less than current epsilon
         if random.random() <= self.epsilon:
             action = [random.randint(0, self.rows-1), random.randint(0, self.columns-1)]
+        # action determined by q network
         else:
             row, column = self.Q_network(
                 torch.tensor(self.board.live_board, dtype=torch.float32).reshape(1, 1, self.rows, self.columns).to(self.device))
@@ -94,23 +99,28 @@ class DQN:
 
         loss_meter = LossMeter()
 
+        # create dataset and dataloader from current set of replay memory
         dataset = TensorDataset(torch.FloatTensor(self.replay_memory.current_states).to(self.device),
                                 torch.IntTensor(self.replay_memory.actions).to(self.device),
                                 torch.IntTensor(self.replay_memory.rewards).to(self.device),
                                 torch.FloatTensor(self.replay_memory.next_states).to(self.device))
         dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
+        # iterate through all batches in dataloader
         for current_state, action, reward, next_state in dataloader:
+            # retrieve row and column predictions from q network
             q_row, q_column = self.Q_network(
                 current_state.reshape(current_state.shape[0], 1, self.rows, self.columns))
             q_rows = [row[action[0][0]] for row in q_row]
             q_columns = [column[action[0][1]] for column in q_column]
 
+            # retrieve row and column targets from target network
             target_row, target_column = self.target_network(
                 next_state.reshape(next_state.shape[0], 1, self.rows, self.columns))
             target_rows = [self.gamma * torch.max(target_row[i]) + reward[i] for i in range(len(target_row))]
             target_columns = [self.gamma * torch.max(target_column[i]) + reward[i] for i in range(len(target_column))]
 
+            # calculate row and column loss separately
             row_loss = self.criterion(
                 torch.tensor(q_rows, dtype=torch.float32, requires_grad=True),
                 torch.tensor(target_rows, dtype=torch.float32))
@@ -118,6 +128,7 @@ class DQN:
                 torch.tensor(q_columns, dtype=torch.float32, requires_grad=True),
                 torch.tensor(target_columns, dtype=torch.float32))
 
+            # combine row and column loss and optimize
             self.optimizer.zero_grad()
             total_loss = row_loss + col_loss
             total_loss.backward()
@@ -235,16 +246,14 @@ class LossMeter:
         self.sum = 0
         self.reset()
 
+    # return all values to 0
     def reset(self):
         self.average = 0
         self.sum = 0
         self.count = 0
 
+    # calculate new values
     def update(self, val, count=1):
         self.count += count
         self.sum += val * count
         self.average = self.sum / self.count
-
-    def __repr__(self):
-        text = f'Loss: {self.average:.4f}'
-        return text
