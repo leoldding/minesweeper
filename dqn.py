@@ -16,21 +16,23 @@ class DQN:
 
         # instantiate both networks
         self.Q_network = CNN(rows, columns).to(self.device)
+        self.Q_update_rate = 1000
         self.target_network = CNN(rows, columns).to(self.device)
         self.target_network.load_state_dict(self.Q_network.state_dict())
-        self.target_update_rate = 500
+        self.target_update_rate = 10000
 
-        self.replay_memory = ReplayMemory(50000)
+        self.replay_memory = ReplayMemory(100000)
 
         self.board = Board(rows, columns, num_mines)
 
         self.epsilon = 1
         self.epsilon_decay = 0.99
         self.epsilon_min = 0.05
-        self.epsilon_update_rate = 100
+        self.epsilon_update_rate = 1000
 
         self.gamma = 0.9
 
+        self.epochs = 500
         self.batch_size = 256
         self.learning_rate = 0.001
 
@@ -39,13 +41,15 @@ class DQN:
 
         # tracked metrics
         self.episode_rewards = []
-        self.episode_loss = []
+        self.epoch_loss = []
         self.episode_empty = []
         self.episode_steps = []
 
     def train(self, episodes):
         for episode in tqdm(range(1, episodes+1), desc='Episodes'):
-            print(f'Episode {episode}')
+            if episode % 100 == 0:
+                print(f'Episode {episode}')
+                print(f'Size of replay memory {len(self.replay_memory)}')
 
             self.episode_rewards.append(0)
             self.board.reset()
@@ -53,7 +57,7 @@ class DQN:
             episode_steps = 0  # max number of steps allowed for one episode
             terminated = False
 
-            while not terminated and episode_steps < 100:
+            while not terminated and episode_steps < 50:
                 state = self.board.get_live_board()  # get current board state
                 action = self.select_action()  # determine action
                 reward, terminated = self.board.update_board(action)  # apply action to board
@@ -65,7 +69,8 @@ class DQN:
 
                 episode_steps += 1
 
-            self.optimize()
+            if episode % self.Q_update_rate == 0:
+                self.optimize()
 
             # hard copy of q network values to target network
             if episode % self.target_update_rate == 0:
@@ -106,37 +111,43 @@ class DQN:
                                 torch.FloatTensor(self.replay_memory.next_states).to(self.device))
         dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
-        # iterate through all batches in dataloader
-        for current_state, action, reward, next_state in dataloader:
-            # retrieve row and column predictions from q network
-            q_row, q_column = self.Q_network(
-                current_state.reshape(current_state.shape[0], 1, self.rows, self.columns))
-            q_rows = [row[action[0][0]] for row in q_row]
-            q_columns = [column[action[0][1]] for column in q_column]
+        for epoch in tqdm(range(1, self.epochs+1), desc='Epoch'):
+            if epoch % 50 == 0:
+                print(f'Optimize Epoch {epoch}')
 
-            # retrieve row and column targets from target network
-            target_row, target_column = self.target_network(
-                next_state.reshape(next_state.shape[0], 1, self.rows, self.columns))
-            target_rows = [self.gamma * torch.max(target_row[i]) + reward[i] for i in range(len(target_row))]
-            target_columns = [self.gamma * torch.max(target_column[i]) + reward[i] for i in range(len(target_column))]
+            loss_meter.reset()
 
-            # calculate row and column loss separately
-            row_loss = self.criterion(
-                torch.tensor(q_rows, dtype=torch.float32, requires_grad=True),
-                torch.tensor(target_rows, dtype=torch.float32))
-            col_loss = self.criterion(
-                torch.tensor(q_columns, dtype=torch.float32, requires_grad=True),
-                torch.tensor(target_columns, dtype=torch.float32))
+            # iterate through all batches in dataloader
+            for current_state, action, reward, next_state in dataloader:
+                # retrieve row and column predictions from q network
+                q_row, q_column = self.Q_network(
+                    current_state.reshape(current_state.shape[0], 1, self.rows, self.columns))
+                q_rows = [row[action[0][0]] for row in q_row]
+                q_columns = [column[action[0][1]] for column in q_column]
 
-            # combine row and column loss and optimize
-            self.optimizer.zero_grad()
-            total_loss = row_loss + col_loss
-            total_loss.backward()
-            self.optimizer.step()
+                # retrieve row and column targets from target network
+                target_row, target_column = self.target_network(
+                    next_state.reshape(next_state.shape[0], 1, self.rows, self.columns))
+                target_rows = [self.gamma * torch.max(target_row[i]) + reward[i] for i in range(len(target_row))]
+                target_columns = [self.gamma * torch.max(target_column[i]) + reward[i] for i in range(len(target_column))]
 
-            loss_meter.update(total_loss.item(), len(action))
+                # calculate row and column loss separately
+                row_loss = self.criterion(
+                    torch.tensor(q_rows, dtype=torch.float32, requires_grad=True),
+                    torch.tensor(target_rows, dtype=torch.float32))
+                col_loss = self.criterion(
+                    torch.tensor(q_columns, dtype=torch.float32, requires_grad=True),
+                    torch.tensor(target_columns, dtype=torch.float32))
 
-        self.episode_loss.append(loss_meter.average)
+                # combine row and column loss and optimize
+                self.optimizer.zero_grad()
+                total_loss = row_loss + col_loss
+                total_loss.backward()
+                self.optimizer.step()
+
+                loss_meter.update(total_loss.item(), len(action))
+
+            self.epoch_loss.append(loss_meter.average)
 
 
 # Used to store observations for the DQN
